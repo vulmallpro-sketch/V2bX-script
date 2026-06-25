@@ -92,30 +92,53 @@ check_args
 [[ $EUID -ne 0 ]] && echo -e "${red}错误：必须使用 root 用户运行此脚本！${plain}" && exit 1
 
 # ─────────────────────────────────────────────
-# 检查并安装必要命令
+# 第一步：无条件确保 curl / wget 可用
+# 这两个命令是后续所有下载操作的基础，必须最先保证
+# ─────────────────────────────────────────────
+echo -e "${yellow}正在确认基础工具（curl / wget）可用...${plain}"
+if command -v apt-get &>/dev/null; then
+    apt-get update -y && apt-get install -y curl wget
+elif command -v yum &>/dev/null; then
+    yum install -y epel-release && yum install -y curl wget
+elif command -v apk &>/dev/null; then
+    apk add --no-cache curl wget
+elif command -v pacman &>/dev/null; then
+    pacman -Sy --noconfirm curl wget
+else
+    echo -e "${red}无法识别包管理器，请手动安装 curl 和 wget 后重试${plain}"
+    exit 1
+fi
+
+# 安装后校验
+for cmd in curl wget; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo -e "${red}${cmd} 安装失败，请手动安装后重试${plain}"
+        exit 1
+    fi
+done
+echo -e "${green}curl / wget 已就绪${plain}"
+
+# ─────────────────────────────────────────────
+# 第二步：检查并安装其余必要命令
 # ─────────────────────────────────────────────
 install_required_tools() {
     local missing=()
-    for cmd in curl wget unzip tar; do
+    for cmd in unzip tar; do
         command -v "$cmd" &>/dev/null || missing+=("$cmd")
     done
 
-    if [[ ${#missing[@]} -eq 0 ]]; then
-        return 0
-    fi
+    [[ ${#missing[@]} -eq 0 ]] && return 0
 
     echo -e "${yellow}检测到缺少命令：${missing[*]}，尝试自动安装...${plain}"
 
     if command -v apt-get &>/dev/null; then
-        apt-get update -y >/dev/null 2>&1
-        apt-get install -y "${missing[@]}" >/dev/null 2>&1
+        apt-get install -y "${missing[@]}"
     elif command -v yum &>/dev/null; then
-        yum install -y epel-release >/dev/null 2>&1
-        yum install -y "${missing[@]}" >/dev/null 2>&1
+        yum install -y "${missing[@]}"
     elif command -v apk &>/dev/null; then
-        apk add --no-cache "${missing[@]}" >/dev/null 2>&1
+        apk add --no-cache "${missing[@]}"
     elif command -v pacman &>/dev/null; then
-        pacman -Sy --noconfirm "${missing[@]}" >/dev/null 2>&1
+        pacman -Sy --noconfirm "${missing[@]}"
     else
         echo -e "${red}无法自动安装依赖，请手动安装：${missing[*]}${plain}"
         exit 1
