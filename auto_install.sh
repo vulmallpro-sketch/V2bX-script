@@ -92,6 +92,50 @@ check_args
 [[ $EUID -ne 0 ]] && echo -e "${red}错误：必须使用 root 用户运行此脚本！${plain}" && exit 1
 
 # ─────────────────────────────────────────────
+# 检查并安装必要命令
+# ─────────────────────────────────────────────
+install_required_tools() {
+    local missing=()
+    for cmd in curl wget unzip tar; do
+        command -v "$cmd" &>/dev/null || missing+=("$cmd")
+    done
+
+    if [[ ${#missing[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    echo -e "${yellow}检测到缺少命令：${missing[*]}，尝试自动安装...${plain}"
+
+    if command -v apt-get &>/dev/null; then
+        apt-get update -y >/dev/null 2>&1
+        apt-get install -y "${missing[@]}" >/dev/null 2>&1
+    elif command -v yum &>/dev/null; then
+        yum install -y epel-release >/dev/null 2>&1
+        yum install -y "${missing[@]}" >/dev/null 2>&1
+    elif command -v apk &>/dev/null; then
+        apk add --no-cache "${missing[@]}" >/dev/null 2>&1
+    elif command -v pacman &>/dev/null; then
+        pacman -Sy --noconfirm "${missing[@]}" >/dev/null 2>&1
+    else
+        echo -e "${red}无法自动安装依赖，请手动安装：${missing[*]}${plain}"
+        exit 1
+    fi
+
+    # 安装后再次校验
+    local still_missing=()
+    for cmd in "${missing[@]}"; do
+        command -v "$cmd" &>/dev/null || still_missing+=("$cmd")
+    done
+    if [[ ${#still_missing[@]} -gt 0 ]]; then
+        echo -e "${red}以下命令安装失败，请手动安装后重试：${still_missing[*]}${plain}"
+        exit 1
+    fi
+    echo -e "${green}依赖命令安装完成${plain}"
+}
+
+install_required_tools
+
+# ─────────────────────────────────────────────
 # 确定核心类型编号（兼容 add_node_config 逻辑）
 # ─────────────────────────────────────────────
 core_xray=false
